@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <ctype.h>
 #ifdef __linux__
 #include <termios.h>
 #endif
@@ -93,8 +94,7 @@ static int print_line(int fd, const char *ptr) {
 	return len;
 }
 
-template<int size, int history_size>
-int read_command(char (&buffer)[history_size][size], int current_history, FILE *f) {
+void read_command(char *buffer, int size, FILE *f) {
 	bool on_loop = true;
 	int pos = 0;
 	int len = 0;
@@ -108,13 +108,12 @@ int read_command(char (&buffer)[history_size][size], int current_history, FILE *
 	cfmakeraw(&param);
 	tcsetattr(0, TCSADRAIN, &param);
 #endif
-	memset(buffer[current_history], 0, size);
+	memset(buffer, 0, size);
 	setvbuf(stdin, NULL, _IONBF, 0);
 	while (on_loop) {
-		char inbuf[4];
-		int readed;
-		if ((readed = read(fd, inbuf, sizeof(inbuf))) >= 1)
-			switch (inbuf[0]) {
+		char c;
+		if (read(fd, &c, 1) >= 1)
+			switch (c) {
 			case '\r':
 			case '\n':
 				print_str(fd, "\r\n");
@@ -124,35 +123,21 @@ int read_command(char (&buffer)[history_size][size], int current_history, FILE *
 			case 127:
 				if (pos > 0) {
 					pos--;
-					remove_char(buffer[current_history], pos, len);
+					remove_char(buffer, pos, len);
 					move_left(fd, 1);
 					print_str(fd, "\x1b[K");
-					print_line(fd, buffer[current_history] + pos);
+					print_line(fd, buffer + pos);
 					len--;
 				}
 				break;
 			case 27:
-				if (inbuf[1] == 91) // Arrow
-					switch (inbuf[2]) {
-					case 65: // up
-						if (current_history < (history_size - 1)) {
-							current_history++;
-							move_left(fd, pos);
-							len = strlen(buffer[current_history]);
-							pos = std::max(pos, len);
-							write(fd, buffer[current_history], len);
-							move_right(fd, len - pos);
-						}
+				read(fd, &c, 1);
+				if (c == 91) // Arrow
+					read(fd, &c, 1);
+					switch (c) {
+					case 65: // up TODO
 						break;
-					case 66: // down
-						if (current_history > 0) {
-							current_history--;
-							move_left(fd, pos);
-							len = strlen(buffer[current_history]);
-							pos = std::max(pos, len);
-							write(fd, buffer[current_history], len);
-							move_right(fd, len - pos);
-						}
+					case 66: // down TODO
 						break;
 					case 67: // right
 						if (pos < len) {
@@ -175,28 +160,22 @@ int read_command(char (&buffer)[history_size][size], int current_history, FILE *
 						pos = len;
 						break;
 					case 51: // DEL
+						read(fd, &c, 1); // read the ~ char
 						if (pos<len) {
-							remove_char(buffer[current_history], pos, len);
+							remove_char(buffer, pos, len);
 							print_str(fd, "\x1b[K");
-							print_line(fd, buffer[current_history] + pos);
+							print_line(fd, buffer + pos);
 							len--;
 						}
 						break;
 					default:
-						do {
-							int i;
-							printf("\r\n<<");
-							for(i=0; i<readed; i++)
-								printf("%d ", inbuf[i]);
-							printf(">>\r\n");
-						} while (0);
 						break;
 					}
 				break;
 			default:
-				if (len < size - 1) {
-					insert_char(inbuf[0], buffer[current_history], pos, len);
-					print_line(fd, buffer[current_history] + pos);
+				if (len < size - 1 && isprint(c)) {
+					insert_char(c, buffer, pos, len);
+					print_line(fd, buffer + pos);
 					move_right(fd, 1);
 					pos++;
 					len++;
@@ -210,10 +189,9 @@ int read_command(char (&buffer)[history_size][size], int current_history, FILE *
 #if 0
 	printf("\n<<%s>>\n", buffer);
 #endif
-	return current_history;
 }
 
-static char buffer[10][2048];
+static char buffer[2048];
 
 #ifdef __linux__
 int main(int argc, char **argv)
@@ -249,15 +227,16 @@ extern "C" int js_main(int argc, char **argv)
 		printf("ERROR: %s\n", e->text.c_str());
 	}
 
-	int current_h = 0;
 	while (js->evaluate("lets_quit") == "0") {
-		char *command;
 		printf("js> ");
 		fflush(stdout);
-		current_h = read_command(buffer, current_h, stdin);
-		command = buffer[current_h];
+#if 0
+		fgets(buffer, sizeof(buffer), stdin);
+#else
+		read_command(buffer, sizeof(buffer), stdin);
+#endif
 		try {
-			js->execute(command);
+			js->execute(buffer);
 		} catch (CScriptException *e) {
 			printf("ERROR: %s\n", e->text.c_str());
 		}
