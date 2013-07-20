@@ -84,7 +84,7 @@ static void move_right(int fd, int n) {
 
 static int print_str(int fd, const char *ptr) {
 	int len = strlen(ptr);
-	if (len>0)
+	if (len > 0)
 		return write(fd, ptr, len);
 	return 0;
 }
@@ -100,21 +100,58 @@ static void clear_line(int fd) {
 	print_str(fd, "\x1b[K");
 }
 
-typedef enum {
-	READ_NONE,
-	READ_ENTER,
-	READ_UP,
-	READ_DOWN
-} read_status_t;
+#define LINE_SIZE 128
+#define HISTORY_LEN 10
 
-read_status_t read_command(char *buf, int size, FILE *f) {
-	read_status_t stat = READ_NONE;
+typedef struct {
+	int pos;
+	int len;
+	char line[LINE_SIZE];
+} history_entry_t;
+
+typedef struct {
+	int next;
+	history_entry_t history[HISTORY_LEN];
+} history_buffer_t;
+
+void history_init(history_buffer_t *h) {
+	h->next = 0;
+}
+
+void history_insert(history_buffer_t *h, const char *buf, int pos, int len) {
+	if (h->next >= HISTORY_LEN)
+		h->next = 0;
+	history_entry_t *e = &h->history[h->next];
+	e->len = len;
+	e->pos = pos;
+	strncpy(e->line, buf, LINE_SIZE);
+	h->next++;
+}
+
+void history_get(unsigned int n, history_buffer_t *h, char *buf, int *pos,
+		int *len) {
+	if (n < HISTORY_LEN) {
+		history_entry_t *e = &h->history[n];
+		strcpy(buf, e->line);
+		if (pos)
+			*pos = e->pos;
+		if (len)
+			*len = e->len;
+	}
+}
+
+void redraw_line(int fd, const char *ptr, int pos, int len) {
+	print_line(fd, ptr);
+	if (pos > 0)
+		move_right(fd, pos);
+}
+
+void read_command(char *buf, int size, history_buffer_t *h, FILE *f) {
 	bool on_loop = true;
-	int len = strlen(buf);
-	int pos = len;
+	int len = 0;
+	int pos = 0;
+	int current_h = h->next;
 	int fd = fileno(f);
-	print_line(fd, buf);
-	move_right(fd, pos);
 #ifdef __linux__
 	int i;
 	struct termios param;
@@ -124,7 +161,7 @@ read_status_t read_command(char *buf, int size, FILE *f) {
 	cfmakeraw(&param);
 	tcsetattr(0, TCSADRAIN, &param);
 #endif
-	// memset(buf, 0, size);
+	memset(buf, 0, size);
 	setvbuf(stdin, NULL, _IONBF, 0);
 	while (on_loop) {
 		char c;
@@ -132,8 +169,9 @@ read_status_t read_command(char *buf, int size, FILE *f) {
 			switch (c) {
 			case '\r':
 			case '\n':
+				if (len > 0)
+					history_insert(h, buf, pos, len);
 				print_str(fd, "\r\n");
-				stat = READ_ENTER;
 				on_loop = false;
 				break;
 			case '\b':
@@ -151,53 +189,57 @@ read_status_t read_command(char *buf, int size, FILE *f) {
 				read(fd, &c, 1);
 				if (c == 91) // Arrow
 					read(fd, &c, 1);
-					switch (c) {
-					case 65: // up TODO
-						//move_left(fd, pos - 1);
-						//clear_line(fd);
-						print_str(fd, "\r\n");
-						stat = READ_UP;
-						on_loop = false;
-						break;
-					case 66: // down TODO
-						//move_left(fd, pos - 1);
-						//clear_line(fd);
-						print_str(fd, "\r\n");
-						stat = READ_DOWN;
-						on_loop = false;
-						break;
-					case 67: // right
-						if (pos < len) {
-							pos++;
-							move_right(fd, 1);
-						}
-						break;
-					case 68: // left
-						if (pos > 0) {
-							pos--;
-							move_left(fd, 1);
-						}
-						break;
-					case 72: // HOME
-						move_left(fd, pos);
-						pos = 0;
-						break;
-					case 70: // END
-						move_right(fd, len - pos);
-						pos = len;
-						break;
-					case 51: // DEL
-						read(fd, &c, 1); // read the ~ char
-						if (pos<len) {
-							remove_char(buf, pos, len);
-							clear_line(fd);
-							print_line(fd, buf + pos);
-							len--;
-						}
-						break;
-					default:
-						break;
+				switch (c) {
+				case 66: // down
+					if (current_h < h->next) {
+						if (pos > 0)
+							move_left(fd, pos);
+						clear_line(fd);
+						history_get(++current_h, h, buf, &pos, &len);
+						redraw_line(fd, buf, pos, len);
 					}
+					break;
+				case 65: // up
+					if (current_h > 0) {
+						if (pos > 0)
+							move_left(fd, pos);
+						clear_line(fd);
+						history_get(--current_h, h, buf, &pos, &len);
+						redraw_line(fd, buf, pos, len);
+					}
+					break;
+				case 67: // right
+					if (pos < len) {
+						pos++;
+						move_right(fd, 1);
+					}
+					break;
+				case 68: // left
+					if (pos > 0) {
+						pos--;
+						move_left(fd, 1);
+					}
+					break;
+				case 72: // HOME
+					move_left(fd, pos);
+					pos = 0;
+					break;
+				case 70: // END
+					move_right(fd, len - pos);
+					pos = len;
+					break;
+				case 51: // DEL
+					read(fd, &c, 1); // read the ~ char
+					if (pos < len) {
+						remove_char(buf, pos, len);
+						clear_line(fd);
+						print_line(fd, buf + pos);
+						len--;
+					}
+					break;
+				default:
+					break;
+				}
 				break;
 			default:
 				if (len < size - 1 && isprint(c)) {
@@ -216,10 +258,10 @@ read_status_t read_command(char *buf, int size, FILE *f) {
 #if 1
 	printf("\n<<%s>>\n", buf);
 #endif
-	return stat;
 }
 
-static char buffer[10][2048];
+static history_buffer_t histroy_buffer;
+static char buffer[LINE_SIZE];
 
 #ifdef __linux__
 int main(int argc, char **argv)
@@ -241,13 +283,11 @@ extern "C" int js_main(int argc, char **argv)
 	/* Execute out bit of code - we could call 'evaluate' here if
 	 we wanted something returned */
 	try {
-		js->execute(
-				"var lets_quit = 0;"
+		js->execute("var lets_quit = 0;"
 				"function quit() {"
 				"  lets_quit = 1;"
 				"}");
-		js->execute(
-				"print(\"Interactive mode...\n"
+		js->execute("print(\"Interactive mode...\n"
 				"Type quit(); to exit,\n"
 				"or print(...); to print something,\n"
 				"or dump() to dump the symbol table!\");");
@@ -255,37 +295,16 @@ extern "C" int js_main(int argc, char **argv)
 		printf("ERROR: %s\n", e->text.c_str());
 	}
 
-	int current_buffer = 0;
-	int max_buffer = 0;
 	while (js->evaluate("lets_quit") == "0") {
-		retry:
-		printf("js(%d-%d)> ", current_buffer, max_buffer);
+		printf("js> ");
 		fflush(stdout);
-		char *ptr = &buffer[current_buffer][0];
 #if 0
 		fgets(buffer, sizeof(buffer), stdin);
 #else
-		switch (read_command(ptr, 2048, stdin)) {
-		case READ_ENTER:
-			max_buffer++;
-			if (max_buffer >= 10)
-				max_buffer = 0;
-			current_buffer = max_buffer;
-			break;
-		case READ_UP:
-			if (current_buffer > 0)
-				current_buffer--;
-			goto retry;
-			break;
-		case READ_DOWN:
-			if (current_buffer < max_buffer && max_buffer < 10)
-				current_buffer++;
-			goto retry;
-			break;
-		}
+		read_command(buffer, sizeof(buffer), &histroy_buffer, stdin);
 #endif
 		try {
-			js->execute(ptr);
+			js->execute(buffer);
 		} catch (CScriptException *e) {
 			printf("ERROR: %s\n", e->text.c_str());
 		}
