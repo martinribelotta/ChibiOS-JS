@@ -9,8 +9,8 @@ SRCS = Script.cpp \
 
 OBJS=$(SRCS:.cpp=.o)
 
-%.o: %.c
-	$(CXX) -c -o $@ $^
+%.o: %.cpp
+	$(CXX) -ggdb3 -c -o $@ $^
 
 $(TARGET): $(OBJS)
 	$(CXX) -o $@ $(OBJS)

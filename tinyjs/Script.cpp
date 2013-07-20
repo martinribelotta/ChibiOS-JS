@@ -75,9 +75,11 @@ static void move_left(int fd, int n) {
 }
 
 static void move_right(int fd, int n) {
-	char buf[10];
-	int l = sprintf(buf, "\x1b[%dC", n);
-	write(fd, buf, l);
+	if (n) {
+		char buf[10];
+		int l = sprintf(buf, "\x1b[%dC", n);
+		write(fd, buf, l);
+	}
 }
 
 static int print_str(int fd, const char *ptr) {
@@ -94,11 +96,25 @@ static int print_line(int fd, const char *ptr) {
 	return len;
 }
 
-void read_command(char *buffer, int size, FILE *f) {
+static void clear_line(int fd) {
+	print_str(fd, "\x1b[K");
+}
+
+typedef enum {
+	READ_NONE,
+	READ_ENTER,
+	READ_UP,
+	READ_DOWN
+} read_status_t;
+
+read_status_t read_command(char *buf, int size, FILE *f) {
+	read_status_t stat = READ_NONE;
 	bool on_loop = true;
-	int pos = 0;
-	int len = 0;
+	int len = strlen(buf);
+	int pos = len;
 	int fd = fileno(f);
+	print_line(fd, buf);
+	move_right(fd, pos);
 #ifdef __linux__
 	int i;
 	struct termios param;
@@ -108,7 +124,7 @@ void read_command(char *buffer, int size, FILE *f) {
 	cfmakeraw(&param);
 	tcsetattr(0, TCSADRAIN, &param);
 #endif
-	memset(buffer, 0, size);
+	// memset(buf, 0, size);
 	setvbuf(stdin, NULL, _IONBF, 0);
 	while (on_loop) {
 		char c;
@@ -117,16 +133,17 @@ void read_command(char *buffer, int size, FILE *f) {
 			case '\r':
 			case '\n':
 				print_str(fd, "\r\n");
+				stat = READ_ENTER;
 				on_loop = false;
 				break;
 			case '\b':
 			case 127:
 				if (pos > 0) {
 					pos--;
-					remove_char(buffer, pos, len);
+					remove_char(buf, pos, len);
 					move_left(fd, 1);
-					print_str(fd, "\x1b[K");
-					print_line(fd, buffer + pos);
+					clear_line(fd);
+					print_line(fd, buf + pos);
 					len--;
 				}
 				break;
@@ -136,8 +153,18 @@ void read_command(char *buffer, int size, FILE *f) {
 					read(fd, &c, 1);
 					switch (c) {
 					case 65: // up TODO
+						//move_left(fd, pos - 1);
+						//clear_line(fd);
+						print_str(fd, "\r\n");
+						stat = READ_UP;
+						on_loop = false;
 						break;
 					case 66: // down TODO
+						//move_left(fd, pos - 1);
+						//clear_line(fd);
+						print_str(fd, "\r\n");
+						stat = READ_DOWN;
+						on_loop = false;
 						break;
 					case 67: // right
 						if (pos < len) {
@@ -162,9 +189,9 @@ void read_command(char *buffer, int size, FILE *f) {
 					case 51: // DEL
 						read(fd, &c, 1); // read the ~ char
 						if (pos<len) {
-							remove_char(buffer, pos, len);
-							print_str(fd, "\x1b[K");
-							print_line(fd, buffer + pos);
+							remove_char(buf, pos, len);
+							clear_line(fd);
+							print_line(fd, buf + pos);
 							len--;
 						}
 						break;
@@ -174,8 +201,8 @@ void read_command(char *buffer, int size, FILE *f) {
 				break;
 			default:
 				if (len < size - 1 && isprint(c)) {
-					insert_char(c, buffer, pos, len);
-					print_line(fd, buffer + pos);
+					insert_char(c, buf, pos, len);
+					print_line(fd, buf + pos);
 					move_right(fd, 1);
 					pos++;
 					len++;
@@ -186,12 +213,13 @@ void read_command(char *buffer, int size, FILE *f) {
 #ifdef __linux__
 	tcsetattr(0, TCSADRAIN, &tioparam);
 #endif
-#if 0
-	printf("\n<<%s>>\n", buffer);
+#if 1
+	printf("\n<<%s>>\n", buf);
 #endif
+	return stat;
 }
 
-static char buffer[2048];
+static char buffer[10][2048];
 
 #ifdef __linux__
 int main(int argc, char **argv)
@@ -227,16 +255,37 @@ extern "C" int js_main(int argc, char **argv)
 		printf("ERROR: %s\n", e->text.c_str());
 	}
 
+	int current_buffer = 0;
+	int max_buffer = 0;
 	while (js->evaluate("lets_quit") == "0") {
-		printf("js> ");
+		retry:
+		printf("js(%d-%d)> ", current_buffer, max_buffer);
 		fflush(stdout);
+		char *ptr = &buffer[current_buffer][0];
 #if 0
 		fgets(buffer, sizeof(buffer), stdin);
 #else
-		read_command(buffer, sizeof(buffer), stdin);
+		switch (read_command(ptr, 2048, stdin)) {
+		case READ_ENTER:
+			max_buffer++;
+			if (max_buffer >= 10)
+				max_buffer = 0;
+			current_buffer = max_buffer;
+			break;
+		case READ_UP:
+			if (current_buffer > 0)
+				current_buffer--;
+			goto retry;
+			break;
+		case READ_DOWN:
+			if (current_buffer < max_buffer && max_buffer < 10)
+				current_buffer++;
+			goto retry;
+			break;
+		}
 #endif
 		try {
-			js->execute(buffer);
+			js->execute(ptr);
 		} catch (CScriptException *e) {
 			printf("ERROR: %s\n", e->text.c_str());
 		}
