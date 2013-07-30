@@ -42,6 +42,8 @@
 #include <termios.h>
 #endif
 
+#include "rdline.h"
+
 void js_print(CScriptVar *v, void *userdata) {
 	printf("> %s\n", v->getParameter("text")->getString().c_str());
 }
@@ -51,6 +53,7 @@ void js_dump(CScriptVar *v, void *userdata) {
 	js->root->trace(">  ");
 }
 
+#if 0
 static void insert_char(char c, char *buffer, int pos, int len) {
 	int max = len;
 	while (max >= pos) {
@@ -260,8 +263,28 @@ void read_command(char *buf, int size, history_buffer_t *h, FILE *f) {
 #endif
 }
 
-static history_buffer_t histroy_buffer;
 static char buffer[LINE_SIZE];
+#endif
+
+static history_buffer_t histroy_buffer;
+static line_t buffer;
+
+static void rdline_stdout_put(char c) {
+	write(fileno(stdout), &c, 1);
+}
+
+static int rdline_stdout_get(void) {
+	char c;
+	if (read(fileno(stdin), &c, 1) == 1)
+		return c;
+	else
+		return -1;
+}
+
+static const rdline_cfg_t rdline_stdout = {
+		rdline_stdout_put,
+		rdline_stdout_get
+};
 
 #ifdef __linux__
 int main(int argc, char **argv)
@@ -295,13 +318,14 @@ extern "C" int js_main(int argc, char **argv)
 		printf("ERROR: %s\n", e->text.c_str());
 	}
 
+	histroy_buffer.next = 0;
 	while (js->evaluate("lets_quit") == "0") {
 		printf("js> ");
 		fflush(stdout);
 #if 0
 		fgets(buffer, sizeof(buffer), stdin);
 #else
-		read_command(buffer, sizeof(buffer), &histroy_buffer, stdin);
+		rdline_read(buffer, &histroy_buffer, &rdline_stdout);
 #endif
 		try {
 			js->execute(buffer);
