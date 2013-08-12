@@ -6,15 +6,35 @@
 
 #include <posix_conf.h>
 
+#include "posix_ioctl.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef union {
+	void *p_void;
+	int *p_int;
+	char *p_char;
+
+	char d_char;
+	int d_int;
+	float d_float;
+
+	uint8_t u8;
+	uint16_t u16;
+	uint32_t u32;
+
+	posix_seek_t *seek;
+	posix_stat_t *stat;
+} posix_variant_t;
 
 typedef struct {
 	void (*open)(void *ip, int mode);
 	void (*close)(void *ip);
 	size_t (*write)(void *ip, const void *data, size_t size);
 	size_t (*read)(void *ip, void *data, size_t size);
+	int (*ioctl)(void *ip, posix_ioctl_t cmd, posix_variant_t v);
 } posix_stream_vmt_t;
 
 typedef struct {
@@ -65,6 +85,7 @@ extern int posix_open(const char *name, int mode);
 extern void posix_close(int fd);
 extern int posix_write(int fd, const void *data, size_t size);
 extern int posix_read(int fd, void *data, size_t size);
+extern int posix_ioctl(int fd, posix_ioctl_t cmd, posix_variant_t v);
 
 #ifdef __cplusplus
 }

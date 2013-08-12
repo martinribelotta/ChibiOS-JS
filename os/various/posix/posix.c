@@ -70,7 +70,7 @@ int posix_open(const char *fname, int mode) {
 		posix_file_provider_t *p = fproviders;
 		posix_stream_t *s = posix_get_stream(newfd);
 		while (p) {
-			if (p->open(s, p->ip, fname, mode) != -1) {
+			if (p->open(p->ip, s, fname, mode) != -1) {
 				s->vmt->open(s->ip, mode);
 				return newfd;
 			}
@@ -102,3 +102,12 @@ int posix_read(int fd, void *data, size_t size) {
 	else
 		return -1;
 }
+
+int posix_ioctl(int fd, posix_ioctl_t cmd, posix_variant_t v) {
+	posix_stream_t *ip = posix_get_stream(fd);
+	if (ip->vmt && ip->vmt->ioctl)
+		return ip->vmt->ioctl(ip->ip, cmd, v);
+	else
+		return -1;
+}
+

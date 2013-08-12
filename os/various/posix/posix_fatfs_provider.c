@@ -2,6 +2,7 @@
 #include <FatFSWrapper/fatfsWrapper.h>
 
 #include <string.h>
+#include <fcntl.h>
 
 #define FIL_ENTRIES (POSIX_MAX_FD - 3)
 
@@ -69,6 +70,25 @@ fatfs_write, /* write */
 fatfs_read /* read */
 };
 
+BYTE posix_mode_to_ffmode(int fmode) {
+	BYTE mode = FA_READ;
+
+	if (fmode & O_WRONLY)
+		mode |= FA_WRITE;
+	if ((fmode & O_ACCMODE)& O_RDWR)
+		mode |= FA_WRITE;
+	/* Opens the file, if it is existing. If not, a new file is created. */
+	if (fmode & O_CREAT)
+		mode |= FA_OPEN_ALWAYS;
+	/* Creates a new file. If the file is existing, it is truncated and overwritten. */
+	if (fmode & O_TRUNC)
+		mode |= FA_CREATE_ALWAYS;
+	/* Creates a new file. The function fails if the file is already existing. */
+	if (fmode & O_EXCL)
+		mode |= FA_CREATE_NEW;
+	return mode;
+}
+
 static int fatfs_provider_open(void *ip, posix_stream_t *s, const char *path,
 		int mode) {
 	FATFS *fs = (FATFS*) ip;
@@ -76,11 +96,9 @@ static int fatfs_provider_open(void *ip, posix_stream_t *s, const char *path,
 
 	(void) fs;
 
-	if (!s->ip)
-		return -1;
 	s->vmt = &fatfs_vmt;
 	s->ip = fd;
-	if (wf_open(fd, path, mode) != FR_OK)
+	if (wf_open(fd, path, posix_mode_to_ffmode(mode)) != FR_OK)
 		return -1;
 	return 0;
 }
@@ -120,7 +138,7 @@ static posix_readdir_result_t fatfs_provider_readdir(void *ip, posix_dir_t *dir,
 			strncpy(info->path, finfo.fname, sizeof(info->path));
 #endif
 		if (finfo.fname[0] == 0)
-				return POSIX_READDIR_EOD;
+			return POSIX_READDIR_EOD;
 		return POSIX_READDIR_OK;
 	} else
 		return POSIX_READDIR_ERR;

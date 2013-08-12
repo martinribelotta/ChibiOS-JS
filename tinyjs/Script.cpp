@@ -79,9 +79,7 @@ static std::string readall(const char *filename) {
 	std::ifstream is(filename, std::ifstream::in);
 	if (is) {
 		std::string text;
-		is.seekg(0, is.end);
-		text.resize(is.tellg());
-		is.seekg(0, is.beg);
+		text.resize(8192);
 		is.read(&text[0], text.size());
 		is.close();
 		return text;

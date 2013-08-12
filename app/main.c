@@ -65,9 +65,13 @@ static void cmd_mem(BaseSequentialStream *chp, int argc, char *argv[]) {
 }
 
 static void cmd_js(BaseSequentialStream *chp, int argc, char *argv[]) {
-	static const char *default_param[] = { "js" };
+	const char *default_param[10];
+	int i;
+	default_param[0] = "js";
+	for (i = 0; i < argc; i++)
+		default_param[i + 1] = argv[i];
 	extern int js_main(int argc, const char **argv);
-	js_main(1, default_param);
+	js_main(argc + 1, default_param);
 }
 
 static void cmd_threads(BaseSequentialStream *chp, int argc, char *argv[]) {
@@ -115,6 +119,34 @@ static int conv_int(const char *str, int *ok) {
 	return n;
 }
 
+static void f_perror(BaseSequentialStream *chp, FRESULT err) {
+	chprintf(chp, "ERROR: Can not mount SD filesystem %s\r\n",
+			wf_strerror(err));
+}
+
+static void do_cat(BaseSequentialStream *chp, const char *file) {
+	FIL f;
+	FRESULT err;
+	if ((err = f_open(&f, file, FA_READ)) == FR_OK) {
+		while (!f_eof(&f)) {
+			int r;
+			char buf[64];
+			if ((err = f_read(&f, buf, 64, &r)) == FR_OK) {
+				chprintf(chp, "%s", buf);
+			} else
+				f_perror(chp, err);
+		}
+		f_close(&f);
+	} else
+		f_perror(chp, err);
+}
+
+static void cmd_cat(BaseSequentialStream *chp, int argc, char *argv[]) {
+	int i;
+	for(i=0; i<argc; i++)
+		do_cat(chp, argv[i]);
+}
+
 static void cmd_mount(BaseSequentialStream *chp, int argc, char *argv[]) {
 	if (argc > 0 && argc < 2) {
 		if (sdcConnect(&SDCD1) == CH_FAILED) {
@@ -124,7 +156,8 @@ static void cmd_mount(BaseSequentialStream *chp, int argc, char *argv[]) {
 			int ok = FALSE;
 			int n = conv_int(argv[0], &ok);
 			if (ok) {
-				int err = posix_fatfs_provider_init(&fatfs_provider, &SDC_FS, n);
+				int err = posix_fatfs_provider_init(&fatfs_provider, &SDC_FS,
+						n);
 				// FRESULT err = wf_mount(n, &SDC_FS);
 				if (err != FR_OK) {
 					sdcDisconnect(&SDCD1);
@@ -149,14 +182,14 @@ static void cmd_umount(BaseSequentialStream *chp, int argc, char *argv[]) {
 
 static void cmd_ls(BaseSequentialStream *chp, int argc, char *argv[]) {
 	posix_dir_t dir;
-	if (argc>0)
+	if (argc > 0)
 		dir.path = argv[1];
 	else
 		dir.path = "0:/";
 	if (posix_opendir(&dir) == 0) {
 		posix_inode_t inode;
 		posix_readdir_result_t r;
-		while((r = posix_readdir(&dir, &inode)) == POSIX_READDIR_OK)
+		while ((r = posix_readdir(&dir, &inode)) == POSIX_READDIR_OK)
 			chprintf(chp, "> %s\r\n", inode.path);
 		if (r == POSIX_READDIR_ERR)
 			chprintf(chp, "Error reading dir\r\n");
@@ -174,6 +207,7 @@ static const ShellCommand commands[] = { /**/
 { "mount", cmd_mount }, /**/
 { "umount", cmd_umount }, /**/
 { "ls", cmd_ls }, /**/
+{ "cat", cmd_cat }, /**/
 { NULL, NULL } /**/
 };
 
