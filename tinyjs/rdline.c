@@ -110,8 +110,14 @@ static void clear_line(const rdline_cfg_t *cfg) {
 
 static void ncpy(char *dst, const char *src, size_t max) {
 	int i;
-	for (i = 0; src[i] && (i < max); i++)
+	for (i = 0; src[i] && (i < max - 1); i++)
 		dst[i] = src[i];
+	dst[i] = 0;
+}
+
+static void mset(char *dst, char c, size_t z) {
+	while (z--)
+		*dst++ = c;
 }
 
 static void history_insert(history_buffer_t *h, const rdline_ctx_t *ctx) {
@@ -128,6 +134,7 @@ static void history_get(unsigned int n, const history_buffer_t *h,
 		rdline_ctx_t *ctx) {
 	if (n < RDLINE_HISTORY_LEN) {
 		const history_entry_t *e = &h->history[n];
+
 		ncpy(ctx->buf, e->line, RDLINE_EDIT_SIZE);
 		ctx->pos = e->pos;
 		ctx->len = e->len;
@@ -154,11 +161,6 @@ static void rdline_backspace(rdline_ctx_t *ctx) {
 static void move_home(rdline_ctx_t *ctx) {
 	move_left(ctx->cfg, ctx->pos);
 	ctx->pos = 0;
-}
-
-static void mset(char *dst, char c, size_t z) {
-	while (z--)
-		*dst++ = c;
 }
 
 static void rdline_clear(rdline_ctx_t *ctx) {

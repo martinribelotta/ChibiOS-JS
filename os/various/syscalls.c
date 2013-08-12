@@ -61,12 +61,16 @@
 #include <sys/types.h>
 
 #include "ch.h"
-#include "posix.h"
+#include "posix/posix.h"
 #if defined(STDOUT_SD) || defined(STDIN_SD)
 #include "hal.h"
 #endif
 
 /***************************************************************************/
+
+int _open_r(struct _reent *r, const char *path, int mode, ...) {
+	return posix_open(path, mode);
+}
 
 int _read_r(struct _reent *r, int file, char * ptr, int len)
 {
@@ -123,7 +127,7 @@ int _write_r(struct _reent *r, int file, char * ptr, int len)
 int _close_r(struct _reent *r, int file)
 {
   (void)r;
-  (void)file;
+  posix_close(file);
 
   return 0;
 }

@@ -1,0 +1,3 @@
+# FatFS Wrapper for ChibiOS
+
+Simple wrapper moving all FatFS access into a single worker thread.

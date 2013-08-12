@@ -885,7 +885,7 @@ void usb_lld_start(USBDriver *usbp) {
     otgp->PCGCCTL = 0;
 
     /* Internal FS PHY activation.*/
-    otgp->GCCFG = GCCFG_VBUSASEN | GCCFG_VBUSBSEN | GCCFG_PWRDWN;
+    otgp->GCCFG = GCCFG_NOVBUSSENS | GCCFG_VBUSASEN | GCCFG_VBUSBSEN | GCCFG_PWRDWN;
 
     /* Soft core reset.*/
     otg_core_reset(usbp);
