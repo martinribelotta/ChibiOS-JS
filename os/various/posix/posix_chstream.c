@@ -1,13 +1,14 @@
 #include "posix_chstream.h"
 #include "posix.h"
 
-static void chstream_open(void *ip, int mode) {
-	(void) ip;
-	(void) mode;
+static void chstream_init(void *ip) {
+	BaseSequentialStream *stream = (BaseSequentialStream*) ip;
+	(void) stream;
 }
 
 static void chstream_close(void *ip) {
-	(void) ip;
+	BaseSequentialStream *stream = (BaseSequentialStream*) ip;
+	(void) stream;
 }
 
 static size_t chstream_write(void *ip, const void *data, size_t size) {
@@ -36,7 +37,7 @@ static size_t chstream_read(void *ip, void *data, size_t size) {
 }
 
 static const posix_stream_vmt_t posix_chstream_vmt = { /* vmt */
-chstream_open, /* open */
+chstream_init, /* open */
 chstream_close, /* close */
 chstream_write, /* write */
 chstream_read /* read */

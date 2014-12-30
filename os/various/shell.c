@@ -245,7 +245,6 @@ Thread *shellCreateStatic(const ShellConfig *scp, void *wsp, size_t size,
  * @retval FALSE        operation successful.
  */
 bool_t shellGetLine(BaseSequentialStream *chp, char *line, unsigned size) {
-#if 1
 	int idx = 0;
 	line[idx] = 0;
 	while (TRUE) {
@@ -283,41 +282,6 @@ bool_t shellGetLine(BaseSequentialStream *chp, char *line, unsigned size) {
 		}
 	}
 	return FALSE;
-#else
-	char *p = line;
-
-	while (TRUE) {
-		char c;
-
-		if (chSequentialStreamRead(chp, (uint8_t *)&c, 1) == 0)
-		return TRUE;
-		if (c == 4) {
-			chprintf(chp, "^D");
-			return TRUE;
-		}
-		if (c == 8) {
-			if (p != line) {
-				chSequentialStreamPut(chp, c);
-				chSequentialStreamPut(chp, 0x20);
-				chSequentialStreamPut(chp, c);
-				p--;
-			}
-			continue;
-		}
-		if (c == '\r') {
-			chprintf(chp, "\r\n");
-			*p = 0;
-			return FALSE;
-		}
-		if (c < 0x20)
-		continue;
-		if (p < line + size - 1) {
-			chSequentialStreamPut(chp, c);
-			*p++ = (char)c;
-		}
-	}
-	return FALSE;
-#endif
 }
 
 /** @} */

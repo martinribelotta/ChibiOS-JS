@@ -95,13 +95,10 @@ int _read_r(struct _reent *r, int file, char * ptr, int len) {
 
 int _lseek_r(struct _reent *r, int file, int ptr, int dir) {
 	posix_variant_t v;
-	posix_seek_t xseek;
 	(void) r;
-
-	xseek.dir = dir;
-	xseek.off = ptr;
-	v.p_void = &xseek;
-	return posix_ioctl(file, POSIX_SEEK, v);
+	v.seek.off = ptr;
+	v.seek.dir = dir;
+	return posix_ioctl(file, POSIX_SEEK, &v);
 }
 
 /***************************************************************************/
@@ -156,8 +153,8 @@ caddr_t _sbrk_r(struct _reent *r, int incr) {
 int _fstat_r(struct _reent *r, int file, struct stat * st) {
 	posix_variant_t v;
 	(void) r;
-	v.p_void = st;
-	int ret = posix_ioctl(file, POSIX_STAT, v);
+	int ret = posix_ioctl(file, POSIX_STAT, &v);
+	*st = v.stat.st;
 	return ret;
 }
 

@@ -2,6 +2,8 @@
 #define POSIX_IOCTL_H_
 
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 typedef enum {
 	/* cmd         param */

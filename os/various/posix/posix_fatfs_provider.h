@@ -11,6 +11,14 @@
 #include "posix.h"
 #include <ff.h>
 
-extern FRESULT posix_fatfs_provider_init(posix_file_provider_t *p, FATFS *fs, int vol);
+extern const posix_mountpoint_vmt_t fatfs_vmt;
+
+#define FATFS_DECLARE_MOUNTPOINT(name, path, fatfs) \
+	posix_mountpoint_t name = { \
+			&fatfs, \
+			&fatfs_vmt, \
+			path, \
+			NULL \
+	}
 
 #endif /* POSIX_FATFS_PROVIDER_H_ */
